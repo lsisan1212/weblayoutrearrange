@@ -7,7 +7,7 @@
     <style>
         .loading {
             text-align: center;
-            font-size: 18px;
+            font-size: 20px;
             margin-top: 50px;
             color: #666;
             font-family: sans-serif;
@@ -23,7 +23,7 @@
         
         // Setup defaults if parameters are missing
         const targetUrl = urlParams.get('url') || 'https://news.mydrivers.com/blog/';
-        let targetWidth = urlParams.get('width') || '600px';
+        let targetWidth = urlParams.get('width') || '550px';
 
         // Auto-append 'px' if you just pass raw numbers (e.g., width=500 instead of width=500px)
         if (/^\d+$/.test(targetWidth)) {
@@ -75,7 +75,7 @@
                         margin: 10px auto !important;
                     }
                     body, p, td {
-                        font-size: 16px !important;
+                        font-size: 18px !important;
                         line-height: 1.6 !important;
                     }
                 `;
