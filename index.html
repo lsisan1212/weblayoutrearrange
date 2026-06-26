@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fluid Mobile Web Wrapper (Enterprise OOP)</title>
+    <title>Fluid Mobile Web Wrapper (Unbreakable)</title>
     
     <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
 
@@ -75,46 +75,36 @@
     </div>
 
     <div id="content-viewport">
-        <div class="status-msg">正在初始化系統並優化排版...</div>
+        <div class="status-msg">正在啟動高安全防禦系統...</div>
     </div>
 
     <script>
         /**
-         * 1. 負責封鎖與管控瀏覽器縮放行為的類別
+         * 1. 負責封鎖與管控瀏覽器縮放行為的類別 (禁止縮放)
          */
         class ZoomGuard {
             constructor() {
                 this.bindPreventionEvents();
             }
 
-            // 監聽並阻斷所有手勢縮放
             bindPreventionEvents() {
-                // 阻斷雙指捏合縮放 (Pinch to zoom)
                 document.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
                 document.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
                 
-                // 阻斷雙擊縮放 (Double tap to zoom)
                 let lastTouchEnd = 0;
                 document.addEventListener('touchend', (e) => {
                     const now = (new Date()).getTime();
-                    if (now - lastTouchEnd <= 300) {
-                        e.preventDefault();
-                    }
+                    if (now - lastTouchEnd <= 300) e.preventDefault();
                     lastTouchEnd = now;
                 }, { passive: false });
             }
 
             handleTouchStart(e) {
-                if (e.touches.length > 1) {
-                    e.preventDefault(); // 多指觸控直接阻斷
-                }
+                if (e.touches.length > 1) e.preventDefault();
             }
 
             handleTouchMove(e) {
-                // 如果偵測到縮放比例不為 1，強制阻斷
-                if (e.scale && e.scale !== 1) {
-                    e.preventDefault();
-                }
+                if (e.scale && e.scale !== 1) e.preventDefault();
             }
         }
 
@@ -134,9 +124,7 @@
             normalizeUrl(url) {
                 let trimmed = url.trim();
                 if (!trimmed) return '';
-                if (!/^https?:\/\//i.test(trimmed)) {
-                    trimmed = 'https://' + trimmed;
-                }
+                if (!/^https?:\/\//i.test(trimmed)) trimmed = 'https://' + trimmed;
                 return trimmed;
             }
 
@@ -176,10 +164,9 @@
         }
 
         /**
-         * 4. 負責生成排版樣式（CSS）的類別
+         * 4. 負責生成排版樣式的工廠類別（精確控制 1px / 2px 留白）
          */
         class StyleFactory {
-            // 靜態函數：返回核心自適應 CSS 字串（包含您指定的 1px 和 2px 留白）
             static createFluidStyleString() {
                 return `
                     body {
@@ -213,22 +200,31 @@
         }
 
         /**
-         * 5. 負責清洗 DOM、防禦超連結脫離框架的類別
+         * 5. 【終極防線】負責清洗 DOM、摧毀惡意腳本、全事件攔截的類別
          */
         class DomSanitizer {
             constructor(urlManager) {
                 this.urlManager = urlManager;
             }
 
-            // 清理遠端文件內部的超連結屬性
-            purifyLinks(remoteDocument) {
+            // 核心淨化：直接拔除所有可能執行跳轉代碼的 HTML 元素
+            purifyRemoteDocument(remoteDocument) {
+                // 1. 拔除所有遠端網頁自帶的 script 腳本，讓網頁失去任何主動跳轉的主權
+                remoteDocument.querySelectorAll('script').forEach(script => script.remove());
+
+                // 2. 徹底清洗所有超連結的潛在跳出屬性
                 remoteDocument.body.querySelectorAll('a').forEach(link => {
                     link.removeAttribute('target');
                     link.removeAttribute('onclick');
                 });
+
+                // 3. 清洗所有表單，防止表單提交導致脫離框架
+                remoteDocument.body.querySelectorAll('form').forEach(form => {
+                    form.removeAttribute('target');
+                    form.removeAttribute('onsubmit');
+                });
             }
 
-            // 注入自適應樣式與 Base 標籤
             injectMetadata(remoteDocument, targetUrl) {
                 const baseTag = remoteDocument.createElement('base');
                 baseTag.href = targetUrl;
@@ -239,19 +235,31 @@
                 remoteDocument.head.appendChild(styleTag);
             }
 
-            // 註冊全域點擊防禦監聽器 (Capture 模式)
-            registerGlobalClickInterceptor() {
-                document.addEventListener('click', (e) => {
-                    const a = e.target.closest('a');
-                    if (a && a.href && a.href.startsWith('http')) {
-                        if (a.closest('#control-bar')) return;
+            // 核心防禦：全方位監聽所有可能導致導航的手勢事件
+            registerGlobalInterceptors() {
+                // 封鎖所有可能被老舊網頁用來做非同步跳轉的手勢事件
+                const hijackEvents = ['click', 'touchend', 'mousedown', 'pointerup'];
+                
+                hijackEvents.forEach(eventType => {
+                    document.addEventListener(eventType, (e) => {
+                        const a = e.target.closest('a');
+                        if (a && a.href && a.href.startsWith('http')) {
+                            if (a.closest('#control-bar')) return;
 
-                        e.preventDefault();
-                        e.stopImmediatePropagation();
-                        
-                        window.location.href = this.urlManager.generateRedirectUrl(a.href);
-                    }
-                }, true);
+                            // 立即切斷事件，防止任何行內或後續代碼執行
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+                            
+                            // 為了避免多個事件重複觸發跳轉，我們只在 click 和 touchend 階段執行安全重新導向
+                            if (eventType === 'click' || eventType === 'touchend') {
+                                const nextUrl = this.urlManager.generateRedirectUrl(a.href);
+                                if (window.location.href !== nextUrl) {
+                                    window.location.href = nextUrl;
+                                }
+                            }
+                        }
+                    }, true); // 採用最強力的 Capture 捕獲模式
+                });
             }
         }
 
@@ -276,7 +284,6 @@
                 this.viewport = document.getElementById('content-viewport');
                 this.proxyBase = 'https://corsproxy.io/?';
                 
-                // 初始化子模組
                 this.zoomGuard = new ZoomGuard();
                 this.urlManager = new UrlManager('https://news.mydrivers.com/blog/');
                 this.navController = new NavigationController(this.urlManager);
@@ -286,7 +293,9 @@
             async launch() {
                 const targetUrl = this.urlManager.getTargetUrl();
                 this.navController.setCurrentUrl(targetUrl);
-                this.sanitizer.registerGlobalClickInterceptor();
+                
+                // 啟動全手勢事件監聽攔截
+                this.sanitizer.registerGlobalInterceptors();
 
                 try {
                     const htmlContent = await this.fetchRemoteContent(targetUrl);
@@ -307,21 +316,20 @@
                 const parser = new DOMParser();
                 const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
 
-                // 執行 DOM 淨化與樣式注入
-                this.sanitizer.purifyLinks(remoteDoc);
+                // 進行極致 DOM 淨化（包含刪除所有遠端腳本）與樣式注入
+                this.sanitizer.purifyRemoteDocument(remoteDoc);
                 this.sanitizer.injectMetadata(remoteDoc, targetUrl);
 
-                // 渲染至主畫面
                 this.viewport.innerHTML = '';
                 
-                // 遷移標頭資源
+                // 遷移必要的 CSS 資源到主網頁的 Head 
                 const assets = remoteDoc.head.querySelectorAll('link, style, base');
                 assets.forEach(asset => document.head.appendChild(asset));
 
-                // 掛載內文
+                // 將安全的網頁主體塞入框架
                 this.viewport.appendChild(remoteDoc.body);
 
-                // 執行 PreText 排版優化
+                // 呼叫 PreText 執行精美排版
                 TypographyEngine.runOptimization(this.viewport);
             }
 
@@ -330,7 +338,7 @@
             }
         }
 
-        // --- 🚀 系統啟動點 ---
+        // --- 🚀 系統啟動 ---
         document.addEventListener('DOMContentLoaded', () => {
             const application = new App();
             application.launch();
