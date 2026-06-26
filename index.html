@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fluid Mobile Web Wrapper with PreText</title>
+    <title>Fluid Mobile Web Wrapper (Bulletproof)</title>
     
-    <!-- 核心：載入 PreText 的中文排版優化腳本 -->
     <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
 
     <style>
@@ -102,25 +101,21 @@
         goBtn.addEventListener('click', navigateToUrl);
         urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrl(); });
 
-        // --- 核心改動 1：將點擊攔截器移到最外層的「主全域視窗」監聽 ---
+        // --- 🛡️ 核心防線一：全域事件攔截與即時阻斷 ---
         document.addEventListener('click', function(e) {
-            // 尋找被點擊元素向上最近的 <a> 標籤
             const a = e.target.closest('a');
             
-            // 如果有點到超連結，且該連結有正常的網址，且不是內部錨點（#）
             if (a && a.href && a.href.startsWith('http')) {
-                
-                // 如果點擊的是我們自己頂部的「前往」按鈕或輸入框（雖然它們不是 <a>，但做個保險防禦）
                 if (a.closest('#control-bar')) return;
 
-                // 核心改動 2：強制阻止瀏覽器的所有預設跳轉（包含開新分頁）
+                // 徹底阻止預設跳轉，並切斷所有後續事件鏈（防止行內 JS 執行）
                 e.preventDefault();
+                e.stopImmediatePropagation();
                 
-                // 強行重導向，把新點擊的網址再次打包塞回我們的 localhost 或 GitHub Pages 網址中
                 const nextUrl = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(a.href);
                 window.location.href = nextUrl;
             }
-        }, true); // 使用 true (Capturing 捕獲模式)，確保在網頁原生 JS 反應過來前優先攔截
+        }, true); // 使用 Capture 模式確保最優先觸發
 
         // 抓取目標網頁
         const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
@@ -139,11 +134,18 @@
                 baseTag.href = targetUrl;
                 remoteDoc.head.appendChild(baseTag);
 
+                // --- 🛡️ 核心防線二：DOM 主動安全淨化 ---
+                // 在內容渲染前，強行把內文所有超連結的破壞性屬性拔除
+                remoteDoc.body.querySelectorAll('a').forEach(link => {
+                    link.removeAttribute('target'); // 拔除 _blank / _top，禁止開新視窗與破壞框架
+                    link.removeAttribute('onclick'); // 拔除行內點擊腳本，防止原生 JS 擅自重導向
+                });
+
                 // 解除寬度限制，並加入左右安全留白
                 const fluidStyle = remoteDoc.createElement('style');
                 fluidStyle.innerHTML = `
                     body {
-                        padding-left: 2px !important;
+                        padding-left: 1px !important;
                         padding-right: 2px !important;
                         box-sizing: border-box !important;
                         display: block !important;
@@ -171,7 +173,6 @@
                 `;
                 remoteDoc.head.appendChild(fluidStyle);
 
-                // 清空讀取訊息
                 viewport.innerHTML = '';
 
                 // 將原網頁的樣式移入主視窗
