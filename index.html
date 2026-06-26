@@ -118,24 +118,38 @@
                 baseTag.href = targetUrl;
                 remoteDoc.head.appendChild(baseTag);
 
-                // 暴力解除所有電腦版的寬度限制，讓排版完全自適應螢幕（不設固定寬度）
+                // 解除寬度限制，並加入左右安全留白
                 const fluidStyle = remoteDoc.createElement('style');
                 fluidStyle.innerHTML = `
-                    html, body, div, p, table, tr, td, ul, li, section, article, header, footer {
+                    /* 讓網頁主體強制在左右兩側留出 16px 的空白，且不會超出螢幕 */
+                    body {
+                        padding-left: 16px !important;
+                        padding-right: 16px !important;
+                        box-sizing: border-box !important;
+                        display: block !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                    }
+
+                    /* 暴力解除所有內部電腦版區塊的寬度限制 */
+                    html, div, p, table, tr, td, ul, li, section, article, header, footer {
                         max-width: 100% !important;
                         width: auto !important;
                         min-width: 0 !important;
                         float: none !important;
                         box-sizing: border-box !important;
                     }
+
+                    /* 讓圖片完美適應留白後的容器寬度 */
                     img, video {
                         max-width: 100% !important;
                         height: auto !important;
                         display: block !important;
                         margin: 12px auto !important;
                     }
-                    /* 設定基礎字體與舒適行高，留給 PreText 做後續微調 */
-                    body, p, td, span, article {
+
+                    /* 基礎文字設定，隨後交給 PreText 優化 */
+                    p, td, span, article {
                         font-size: 16px !important;
                         line-height: 1.8 !important;
                         color: #2c3e50 !important;
@@ -152,7 +166,6 @@
                     }
                 });
 
-                // 清空讀取訊息
                 viewport.innerHTML = '';
 
                 // 將原網頁的樣式移入主視窗
@@ -162,14 +175,11 @@
                 // 渲染網頁內容
                 viewport.appendChild(remoteDoc.body);
 
-                // --- 🛠️ 核心：呼跨網頁載入後，呼叫 PreText 進行文字重排優化 ---
-                // 當內容塞進網頁後，立即讓 PreText 介入處理 viewport 內的所有中文文本
+                // 執行 PreText 中文重排
                 if (typeof PreText !== 'undefined' && typeof PreText.process === 'function') {
                     PreText.process(viewport);
                 } else if (typeof pretext === 'function') {
                     pretext(viewport);
-                } else {
-                    console.warn('PreText 腳本尚未載入完成，或 API 名稱有變。請檢查 script src 網址是否正確。');
                 }
             })
             .catch(err => {
