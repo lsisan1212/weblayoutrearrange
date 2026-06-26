@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fluid Mobile Web Wrapper</title>
+    <title>Fluid Mobile Web Wrapper with PreText</title>
+    
+    <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
+
     <style>
-        /* Reset and Base App Layout */
-        hb, body {
+        html, body {
             margin: 0;
             padding: 0;
             background-color: #f5f5f7;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        /* Sticky Control Bar at the Top */
+        /* 置頂導覽列 */
         #control-bar {
             position: sticky;
             top: 0;
@@ -38,11 +40,6 @@
             border-radius: 6px;
             font-size: 14px;
             outline: none;
-            transition: border-color 0.2s;
-        }
-
-        #url-input:focus {
-            border-color: #409eff;
         }
 
         #go-btn {
@@ -53,16 +50,10 @@
             border: none;
             border-radius: 6px;
             font-size: 14px;
-            font-weight: 500;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
-        #go-btn:hover {
-            background: #66b1ff;
-        }
-
-        /* Content Container */
+        /* 內容展示區 */
         #content-viewport {
             width: 100%;
             box-sizing: border-box;
@@ -80,67 +71,56 @@
 </head>
 <body>
 
-    <!-- 1. Top Navigation Bar -->
     <div id="control-bar">
         <input type="text" id="url-input" placeholder="輸入網址..." />
         <button id="go-btn">前往</button>
     </div>
 
-    <!-- 2. Dynamic Content Viewport -->
     <div id="content-viewport">
-        <div class="status-msg">正在為您優化排版，請稍候...</div>
+        <div class="status-msg">正在為您下載並進行 PreText 排版優化...</div>
     </div>
 
     <script>
-        // Configuration Elements
         const urlInput = document.getElementById('url-input');
         const goBtn = document.getElementById('go-btn');
         const viewport = document.getElementById('content-viewport');
 
-        // Setup defaults
         const urlParams = new URLSearchParams(window.location.search);
         const defaultUrl = 'https://news.mydrivers.com/blog/';
         const targetUrl = urlParams.get('url') || defaultUrl;
 
-        // Display current URL in the input bar
         urlInput.value = targetUrl;
 
-        // Trigger Navigation Actions
         function navigateToUrl() {
             let inputUrl = urlInput.value.trim();
             if (!inputUrl) return;
-            if (!/^https?:\/\//i.test(inputUrl)) {
-                inputUrl = 'https://' + inputUrl;
-            }
+            if (!/^https?:\/\//i.test(inputUrl)) inputUrl = 'https://' + inputUrl;
             window.location.href = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(inputUrl);
         }
 
         goBtn.addEventListener('click', navigateToUrl);
-        urlInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') navigateToUrl();
-        });
+        urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrl(); });
 
-        // 3. Fetching and Restructuring Content
+        // 抓取目標網頁
         const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
 
         fetch(proxyUrl)
             .then(response => {
                 if (response.ok) return response.text();
-                throw new Error('無法連線到該網頁，請檢查網址或更換代理通道。');
+                throw new Error('無法連線到該網頁');
             })
             .then(htmlContent => {
                 const parser = new DOMParser();
                 const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
 
-                // Fix asset routes using an internal <base> binding
+                // 修正圖片與相對路徑
                 const baseTag = remoteDoc.createElement('base');
                 baseTag.href = targetUrl;
                 remoteDoc.head.appendChild(baseTag);
 
-                // Fluid text layout implementation rules (Eliminates fixed layouts)
+                // 暴力解除所有電腦版的寬度限制，讓排版完全自適應螢幕（不設固定寬度）
                 const fluidStyle = remoteDoc.createElement('style');
                 fluidStyle.innerHTML = `
-                    /* Overwrite all container widths to be completely fluid */
                     html, body, div, p, table, tr, td, ul, li, section, article, header, footer {
                         max-width: 100% !important;
                         width: auto !important;
@@ -148,35 +128,22 @@
                         float: none !important;
                         box-sizing: border-box !important;
                     }
-
-                    /* Text wrapping and typography optimization (Screen Fitting) */
-                    body, p, td, span, article {
-                        font-size: 16px !important;
-                        line-height: 1.7 !important;
-                        color: #2c3e50 !important;
-                        word-break: break-word !important;
-                        word-wrap: break-word !important;
-                        text-align: justify !important;
-                    }
-
-                    /* Make images scale down perfectly with screen size */
                     img, video {
                         max-width: 100% !important;
                         height: auto !important;
                         display: block !important;
                         margin: 12px auto !important;
                     }
-
-                    /* Handle rigid layout sidebars or tables by hiding or adding scrolls */
-                    table {
-                        display: block !important;
-                        overflow-x: auto !important;
-                        width: 100% !important;
+                    /* 設定基礎字體與舒適行高，留給 PreText 做後續微調 */
+                    body, p, td, span, article {
+                        font-size: 16px !important;
+                        line-height: 1.8 !important;
+                        color: #2c3e50 !important;
                     }
                 `;
                 remoteDoc.head.appendChild(fluidStyle);
 
-                // Intercept document clicks to navigate via our controller setup
+                // 攔截點擊事件
                 remoteDoc.addEventListener('click', function(e) {
                     const a = e.target.closest('a');
                     if (a && a.href && a.href.startsWith('http')) {
@@ -185,15 +152,25 @@
                     }
                 });
 
-                // Clear layout engine message and mount the modified code framework
+                // 清空讀取訊息
                 viewport.innerHTML = '';
-                
-                // Move external stylesheets/base rules over to our master document head
+
+                // 將原網頁的樣式移入主視窗
                 const elementsToMove = remoteDoc.head.querySelectorAll('link, style, base');
                 elementsToMove.forEach(el => document.head.appendChild(el));
 
-                // Mount document structure body directly inside our visual container frame
+                // 渲染網頁內容
                 viewport.appendChild(remoteDoc.body);
+
+                // --- 🛠️ 核心：呼跨網頁載入後，呼叫 PreText 進行文字重排優化 ---
+                // 當內容塞進網頁後，立即讓 PreText 介入處理 viewport 內的所有中文文本
+                if (typeof PreText !== 'undefined' && typeof PreText.process === 'function') {
+                    PreText.process(viewport);
+                } else if (typeof pretext === 'function') {
+                    pretext(viewport);
+                } else {
+                    console.warn('PreText 腳本尚未載入完成，或 API 名稱有變。請檢查 script src 網址是否正確。');
+                }
             })
             .catch(err => {
                 viewport.innerHTML = `<div class="status-msg" style="color:#f56c6c;">優化失敗: ${err.message}</div>`;
