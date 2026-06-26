@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fluid Mobile Web Wrapper (Bulletproof)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fluid Mobile Web Wrapper (Enterprise OOP)</title>
     
     <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
 
@@ -15,7 +15,6 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        /* 置頂導覽列 */
         #control-bar {
             position: sticky;
             top: 0;
@@ -53,7 +52,6 @@
             cursor: pointer;
         }
 
-        /* 內容展示區 */
         #content-viewport {
             width: 100%;
             box-sizing: border-box;
@@ -77,73 +75,113 @@
     </div>
 
     <div id="content-viewport">
-        <div class="status-msg">正在為您下載並進行 PreText 排版優化...</div>
+        <div class="status-msg">正在初始化系統並優化排版...</div>
     </div>
 
     <script>
-        const urlInput = document.getElementById('url-input');
-        const goBtn = document.getElementById('go-btn');
-        const viewport = document.getElementById('content-viewport');
+        /**
+         * 1. 負責封鎖與管控瀏覽器縮放行為的類別
+         */
+        class ZoomGuard {
+            constructor() {
+                this.bindPreventionEvents();
+            }
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const defaultUrl = 'https://news.mydrivers.com/blog/';
-        const targetUrl = urlParams.get('url') || defaultUrl;
+            // 監聽並阻斷所有手勢縮放
+            bindPreventionEvents() {
+                // 阻斷雙指捏合縮放 (Pinch to zoom)
+                document.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+                document.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+                
+                // 阻斷雙擊縮放 (Double tap to zoom)
+                let lastTouchEnd = 0;
+                document.addEventListener('touchend', (e) => {
+                    const now = (new Date()).getTime();
+                    if (now - lastTouchEnd <= 300) {
+                        e.preventDefault();
+                    }
+                    lastTouchEnd = now;
+                }, { passive: false });
+            }
 
-        urlInput.value = targetUrl;
+            handleTouchStart(e) {
+                if (e.touches.length > 1) {
+                    e.preventDefault(); // 多指觸控直接阻斷
+                }
+            }
 
-        function navigateToUrl() {
-            let inputUrl = urlInput.value.trim();
-            if (!inputUrl) return;
-            if (!/^https?:\/\//i.test(inputUrl)) inputUrl = 'https://' + inputUrl;
-            window.location.href = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(inputUrl);
+            handleTouchMove(e) {
+                // 如果偵測到縮放比例不為 1，強制阻斷
+                if (e.scale && e.scale !== 1) {
+                    e.preventDefault();
+                }
+            }
         }
 
-        goBtn.addEventListener('click', navigateToUrl);
-        urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrl(); });
-
-        // --- 🛡️ 核心防線一：全域事件攔截與即時阻斷 ---
-        document.addEventListener('click', function(e) {
-            const a = e.target.closest('a');
-            
-            if (a && a.href && a.href.startsWith('http')) {
-                if (a.closest('#control-bar')) return;
-
-                // 徹底阻止預設跳轉，並切斷所有後續事件鏈（防止行內 JS 執行）
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                
-                const nextUrl = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(a.href);
-                window.location.href = nextUrl;
+        /**
+         * 2. 負責解析與管理網址參數的類別
+         */
+        class UrlManager {
+            constructor(defaultUrl) {
+                this.defaultUrl = defaultUrl;
+                this.params = new URLSearchParams(window.location.search);
             }
-        }, true); // 使用 Capture 模式確保最優先觸發
 
-        // 抓取目標網頁
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+            getTargetUrl() {
+                return this.params.get('url') || this.defaultUrl;
+            }
 
-        fetch(proxyUrl)
-            .then(response => {
-                if (response.ok) return response.text();
-                throw new Error('無法連線到該網頁');
-            })
-            .then(htmlContent => {
-                const parser = new DOMParser();
-                const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
+            normalizeUrl(url) {
+                let trimmed = url.trim();
+                if (!trimmed) return '';
+                if (!/^https?:\/\//i.test(trimmed)) {
+                    trimmed = 'https://' + trimmed;
+                }
+                return trimmed;
+            }
 
-                // 修正圖片與相對路徑基準
-                const baseTag = remoteDoc.createElement('base');
-                baseTag.href = targetUrl;
-                remoteDoc.head.appendChild(baseTag);
+            generateRedirectUrl(targetUrl) {
+                return window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(targetUrl);
+            }
+        }
 
-                // --- 🛡️ 核心防線二：DOM 主動安全淨化 ---
-                // 在內容渲染前，強行把內文所有超連結的破壞性屬性拔除
-                remoteDoc.body.querySelectorAll('a').forEach(link => {
-                    link.removeAttribute('target'); // 拔除 _blank / _top，禁止開新視窗與破壞框架
-                    link.removeAttribute('onclick'); // 拔除行內點擊腳本，防止原生 JS 擅自重導向
+        /**
+         * 3. 負責置頂控制列 UI 互動的類別
+         */
+        class NavigationController {
+            constructor(urlManager) {
+                this.urlManager = urlManager;
+                this.inputEl = document.getElementById('url-input');
+                this.btnEl = document.getElementById('go-btn');
+                this.initEvents();
+            }
+
+            setCurrentUrl(url) {
+                this.inputEl.value = url;
+            }
+
+            initEvents() {
+                this.btnEl.addEventListener('click', () => this.executeNavigation());
+                this.inputEl.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.executeNavigation();
                 });
+            }
 
-                // 解除寬度限制，並加入左右安全留白
-                const fluidStyle = remoteDoc.createElement('style');
-                fluidStyle.innerHTML = `
+            executeNavigation() {
+                const verifiedUrl = this.urlManager.normalizeUrl(this.inputEl.value);
+                if (verifiedUrl) {
+                    window.location.href = this.urlManager.generateRedirectUrl(verifiedUrl);
+                }
+            }
+        }
+
+        /**
+         * 4. 負責生成排版樣式（CSS）的類別
+         */
+        class StyleFactory {
+            // 靜態函數：返回核心自適應 CSS 字串（包含您指定的 1px 和 2px 留白）
+            static createFluidStyleString() {
+                return `
                     body {
                         padding-left: 1px !important;
                         padding-right: 2px !important;
@@ -171,27 +209,132 @@
                         color: #2c3e50 !important;
                     }
                 `;
-                remoteDoc.head.appendChild(fluidStyle);
+            }
+        }
 
-                viewport.innerHTML = '';
+        /**
+         * 5. 負責清洗 DOM、防禦超連結脫離框架的類別
+         */
+        class DomSanitizer {
+            constructor(urlManager) {
+                this.urlManager = urlManager;
+            }
 
-                // 將原網頁的樣式移入主視窗
-                const elementsToMove = remoteDoc.head.querySelectorAll('link, style, base');
-                elementsToMove.forEach(el => document.head.appendChild(el));
+            // 清理遠端文件內部的超連結屬性
+            purifyLinks(remoteDocument) {
+                remoteDocument.body.querySelectorAll('a').forEach(link => {
+                    link.removeAttribute('target');
+                    link.removeAttribute('onclick');
+                });
+            }
 
-                // 渲染網頁內容
-                viewport.appendChild(remoteDoc.body);
+            // 注入自適應樣式與 Base 標籤
+            injectMetadata(remoteDocument, targetUrl) {
+                const baseTag = remoteDocument.createElement('base');
+                baseTag.href = targetUrl;
+                remoteDocument.head.appendChild(baseTag);
 
-                // 執行 PreText 中文重排
+                const styleTag = remoteDocument.createElement('style');
+                styleTag.innerHTML = StyleFactory.createFluidStyleString();
+                remoteDocument.head.appendChild(styleTag);
+            }
+
+            // 註冊全域點擊防禦監聽器 (Capture 模式)
+            registerGlobalClickInterceptor() {
+                document.addEventListener('click', (e) => {
+                    const a = e.target.closest('a');
+                    if (a && a.href && a.href.startsWith('http')) {
+                        if (a.closest('#control-bar')) return;
+
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        
+                        window.location.href = this.urlManager.generateRedirectUrl(a.href);
+                    }
+                }, true);
+            }
+        }
+
+        /**
+         * 6. 負責與 PreText 排版引擎對接的類別
+         */
+        class TypographyEngine {
+            static runOptimization(targetContainer) {
                 if (typeof PreText !== 'undefined' && typeof PreText.process === 'function') {
-                    PreText.process(viewport);
+                    PreText.process(targetContainer);
                 } else if (typeof pretext === 'function') {
-                    pretext(viewport);
+                    pretext(targetContainer);
                 }
-            })
-            .catch(err => {
-                viewport.innerHTML = `<div class="status-msg" style="color:#f56c6c;">優化失敗: ${err.message}</div>`;
-            });
+            }
+        }
+
+        /**
+         * 7. 核心應用程式調度中心（Orchestrator）
+         */
+        class App {
+            constructor() {
+                this.viewport = document.getElementById('content-viewport');
+                this.proxyBase = 'https://corsproxy.io/?';
+                
+                // 初始化子模組
+                this.zoomGuard = new ZoomGuard();
+                this.urlManager = new UrlManager('https://news.mydrivers.com/blog/');
+                this.navController = new NavigationController(this.urlManager);
+                this.sanitizer = new DomSanitizer(this.urlManager);
+            }
+
+            async launch() {
+                const targetUrl = this.urlManager.getTargetUrl();
+                this.navController.setCurrentUrl(targetUrl);
+                this.sanitizer.registerGlobalClickInterceptor();
+
+                try {
+                    const htmlContent = await this.fetchRemoteContent(targetUrl);
+                    this.render(htmlContent, targetUrl);
+                } catch (err) {
+                    this.renderError(err.message);
+                }
+            }
+
+            async fetchRemoteContent(url) {
+                const requestUrl = this.proxyBase + encodeURIComponent(url);
+                const response = await fetch(requestUrl);
+                if (!response.ok) throw new Error('網絡代理連線異常');
+                return await response.text();
+            }
+
+            render(htmlContent, targetUrl) {
+                const parser = new DOMParser();
+                const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
+
+                // 執行 DOM 淨化與樣式注入
+                this.sanitizer.purifyLinks(remoteDoc);
+                this.sanitizer.injectMetadata(remoteDoc, targetUrl);
+
+                // 渲染至主畫面
+                this.viewport.innerHTML = '';
+                
+                // 遷移標頭資源
+                const assets = remoteDoc.head.querySelectorAll('link, style, base');
+                assets.forEach(asset => document.head.appendChild(asset));
+
+                // 掛載內文
+                this.viewport.appendChild(remoteDoc.body);
+
+                // 執行 PreText 排版優化
+                TypographyEngine.runOptimization(this.viewport);
+            }
+
+            renderError(message) {
+                this.viewport.innerHTML = `<div class="status-msg" style="color:#f56c6c;">優化失敗: ${message}</div>`;
+            }
+        }
+
+        // --- 🚀 系統啟動點 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const application = new App();
+            application.launch();
+        });
     </script>
 </body>
 </html>
