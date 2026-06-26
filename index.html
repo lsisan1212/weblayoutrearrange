@@ -3,102 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Mobile Wrapper</title>
+    <title>Fluid Mobile Web Wrapper</title>
     <style>
-        .loading {
+        /* Reset and Base App Layout */
+        hb, body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* Sticky Control Bar at the Top */
+        #control-bar {
+            position: sticky;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+            z-index: 99999;
+            box-sizing: border-box;
+        }
+
+        #url-input {
+            flex: 1;
+            height: 34px;
+            padding: 0 12px;
+            border: 1px solid #dcdfe6;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #url-input:focus {
+            border-color: #409eff;
+        }
+
+        #go-btn {
+            height: 34px;
+            padding: 0 16px;
+            background: #409eff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #go-btn:hover {
+            background: #66b1ff;
+        }
+
+        /* Content Container */
+        #content-viewport {
+            width: 100%;
+            box-sizing: border-box;
+            background: #ffffff;
+            min-height: calc(100vh - 50px);
+        }
+
+        .status-msg {
             text-align: center;
-            font-size: 20px;
-            margin-top: 50px;
-            color: #666;
-            font-family: sans-serif;
+            font-size: 16px;
+            color: #606266;
+            padding-top: 60px;
         }
     </style>
 </head>
 <body>
-    <div id="app" class="loading">Optimizing layout...</div>
+
+    <!-- 1. Top Navigation Bar -->
+    <div id="control-bar">
+        <input type="text" id="url-input" placeholder="輸入網址..." />
+        <button id="go-btn">前往</button>
+    </div>
+
+    <!-- 2. Dynamic Content Viewport -->
+    <div id="content-viewport">
+        <div class="status-msg">正在為您優化排版，請稍候...</div>
+    </div>
 
     <script>
-        // 1. Get configuration parameters from the URL
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Setup defaults if parameters are missing
-        const targetUrl = urlParams.get('url') || 'https://news.mydrivers.com/blog/';
-        let targetWidth = urlParams.get('width') || '500px';
+        // Configuration Elements
+        const urlInput = document.getElementById('url-input');
+        const goBtn = document.getElementById('go-btn');
+        const viewport = document.getElementById('content-viewport');
 
-        // Auto-append 'px' if you just pass raw numbers (e.g., width=500 instead of width=500px)
-        if (/^\d+$/.test(targetWidth)) {
-            targetWidth += 'px';
+        // Setup defaults
+        const urlParams = new URLSearchParams(window.location.search);
+        const defaultUrl = 'https://news.mydrivers.com/blog/';
+        const targetUrl = urlParams.get('url') || defaultUrl;
+
+        // Display current URL in the input bar
+        urlInput.value = targetUrl;
+
+        // Trigger Navigation Actions
+        function navigateToUrl() {
+            let inputUrl = urlInput.value.trim();
+            if (!inputUrl) return;
+            if (!/^https?:\/\//i.test(inputUrl)) {
+                inputUrl = 'https://' + inputUrl;
+            }
+            window.location.href = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(inputUrl);
         }
 
-        // 2. Fetch via the CORS proxy
+        goBtn.addEventListener('click', navigateToUrl);
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') navigateToUrl();
+        });
+
+        // 3. Fetching and Restructuring Content
         const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
 
         fetch(proxyUrl)
             .then(response => {
                 if (response.ok) return response.text();
-                throw new Error('Proxy error or connection blocked.');
+                throw new Error('無法連線到該網頁，請檢查網址或更換代理通道。');
             })
             .then(htmlContent => {
                 const parser = new DOMParser();
                 const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
 
-                // Fix asset paths relative to the current browsing page
+                // Fix asset routes using an internal <base> binding
                 const baseTag = remoteDoc.createElement('base');
                 baseTag.href = targetUrl;
                 remoteDoc.head.appendChild(baseTag);
 
-                // Inject dynamic CSS layout using your custom width variable
-                const customStyle = remoteDoc.createElement('style');
-                customStyle.innerHTML = `
-                    body {
-                        max-width: ${targetWidth} !important;
-                        width: 100% !important;
-                        margin: 0 auto !important;
-                        background: #fff !important;
-                        padding: 10px !important;
-                        box-shadow: 0 0 15px rgba(0,0,0,0.05);
-                    }
-                    html {
-                        background: #f5f5f7 !important;
-                    }
-                    div, p, table, tr, td, ul, li, section, article {
+                // Fluid text layout implementation rules (Eliminates fixed layouts)
+                const fluidStyle = remoteDoc.createElement('style');
+                fluidStyle.innerHTML = `
+                    /* Overwrite all container widths to be completely fluid */
+                    html, body, div, p, table, tr, td, ul, li, section, article, header, footer {
                         max-width: 100% !important;
                         width: auto !important;
                         min-width: 0 !important;
                         float: none !important;
                         box-sizing: border-box !important;
                     }
-                    img {
+
+                    /* Text wrapping and typography optimization (Screen Fitting) */
+                    body, p, td, span, article {
+                        font-size: 16px !important;
+                        line-height: 1.7 !important;
+                        color: #2c3e50 !important;
+                        word-break: break-word !important;
+                        word-wrap: break-word !important;
+                        text-align: justify !important;
+                    }
+
+                    /* Make images scale down perfectly with screen size */
+                    img, video {
                         max-width: 100% !important;
                         height: auto !important;
                         display: block !important;
-                        margin: 10px auto !important;
+                        margin: 12px auto !important;
                     }
-                    body, p, td {
-                        font-size: 18px !important;
-                        line-height: 1.6 !important;
+
+                    /* Handle rigid layout sidebars or tables by hiding or adding scrolls */
+                    table {
+                        display: block !important;
+                        overflow-x: auto !important;
+                        width: 100% !important;
                     }
                 `;
-                remoteDoc.head.appendChild(customStyle);
+                remoteDoc.head.appendChild(fluidStyle);
 
-                // Intercept clicks and forward both the target link AND your custom width setting
+                // Intercept document clicks to navigate via our controller setup
                 remoteDoc.addEventListener('click', function(e) {
                     const a = e.target.closest('a');
                     if (a && a.href && a.href.startsWith('http')) {
                         e.preventDefault();
-                        
-                        const nextUrl = window.location.origin + window.location.pathname 
-                            + '?url=' + encodeURIComponent(a.href) 
-                            + '&width=' + encodeURIComponent(targetWidth);
-                            
-                        window.location.href = nextUrl;
+                        window.location.href = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(a.href);
                     }
                 });
 
-                document.documentElement.innerHTML = remoteDoc.documentElement.innerHTML;
+                // Clear layout engine message and mount the modified code framework
+                viewport.innerHTML = '';
+                
+                // Move external stylesheets/base rules over to our master document head
+                const elementsToMove = remoteDoc.head.querySelectorAll('link, style, base');
+                elementsToMove.forEach(el => document.head.appendChild(el));
+
+                // Mount document structure body directly inside our visual container frame
+                viewport.appendChild(remoteDoc.body);
             })
             .catch(err => {
-                document.getElementById('app').innerHTML = `<p style="color:red;">Failed to load: ${err.message}</p>`;
+                viewport.innerHTML = `<div class="status-msg" style="color:#f56c6c;">優化失敗: ${err.message}</div>`;
             });
     </script>
 </body>
