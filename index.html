@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fluid Mobile Web Wrapper with PreText</title>
     
+    <!-- 核心：載入 PreText 的中文排版優化腳本 -->
     <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
 
     <style>
@@ -44,7 +45,7 @@
 
         #go-btn {
             height: 34px;
-            padding: 0 2px;
+            padding: 0 16px;
             background: #409eff;
             color: #fff;
             border: none;
@@ -101,6 +102,26 @@
         goBtn.addEventListener('click', navigateToUrl);
         urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') navigateToUrl(); });
 
+        // --- 核心改動 1：將點擊攔截器移到最外層的「主全域視窗」監聽 ---
+        document.addEventListener('click', function(e) {
+            // 尋找被點擊元素向上最近的 <a> 標籤
+            const a = e.target.closest('a');
+            
+            // 如果有點到超連結，且該連結有正常的網址，且不是內部錨點（#）
+            if (a && a.href && a.href.startsWith('http')) {
+                
+                // 如果點擊的是我們自己頂部的「前往」按鈕或輸入框（雖然它們不是 <a>，但做個保險防禦）
+                if (a.closest('#control-bar')) return;
+
+                // 核心改動 2：強制阻止瀏覽器的所有預設跳轉（包含開新分頁）
+                e.preventDefault();
+                
+                // 強行重導向，把新點擊的網址再次打包塞回我們的 localhost 或 GitHub Pages 網址中
+                const nextUrl = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(a.href);
+                window.location.href = nextUrl;
+            }
+        }, true); // 使用 true (Capturing 捕獲模式)，確保在網頁原生 JS 反應過來前優先攔截
+
         // 抓取目標網頁
         const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
 
@@ -113,7 +134,7 @@
                 const parser = new DOMParser();
                 const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
 
-                // 修正圖片與相對路徑
+                // 修正圖片與相對路徑基準
                 const baseTag = remoteDoc.createElement('base');
                 baseTag.href = targetUrl;
                 remoteDoc.head.appendChild(baseTag);
@@ -121,17 +142,14 @@
                 // 解除寬度限制，並加入左右安全留白
                 const fluidStyle = remoteDoc.createElement('style');
                 fluidStyle.innerHTML = `
-                    /* 讓網頁主體強制在左右兩側留出 16px 的空白，且不會超出螢幕 */
                     body {
-                        padding-left: 2px !important;
-                        padding-right: 2px !important;
+                        padding-left: 16px !important;
+                        padding-right: 16px !important;
                         box-sizing: border-box !important;
                         display: block !important;
                         width: 100% !important;
                         max-width: 100% !important;
                     }
-
-                    /* 暴力解除所有內部電腦版區塊的寬度限制 */
                     html, div, p, table, tr, td, ul, li, section, article, header, footer {
                         max-width: 100% !important;
                         width: auto !important;
@@ -139,16 +157,12 @@
                         float: none !important;
                         box-sizing: border-box !important;
                     }
-
-                    /* 讓圖片完美適應留白後的容器寬度 */
                     img, video {
                         max-width: 100% !important;
                         height: auto !important;
                         display: block !important;
                         margin: 12px auto !important;
                     }
-
-                    /* 基礎文字設定，隨後交給 PreText 優化 */
                     p, td, span, article {
                         font-size: 16px !important;
                         line-height: 1.8 !important;
@@ -157,15 +171,7 @@
                 `;
                 remoteDoc.head.appendChild(fluidStyle);
 
-                // 攔截點擊事件
-                remoteDoc.addEventListener('click', function(e) {
-                    const a = e.target.closest('a');
-                    if (a && a.href && a.href.startsWith('http')) {
-                        e.preventDefault();
-                        window.location.href = window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(a.href);
-                    }
-                });
-
+                // 清空讀取訊息
                 viewport.innerHTML = '';
 
                 // 將原網頁的樣式移入主視窗
