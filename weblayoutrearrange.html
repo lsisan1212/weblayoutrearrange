@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Mobile Wrapper</title>
+    <style>
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 50px;
+            color: #666;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="loading">Optimizing layout...</div>
+
+    <script>
+        // 1. Get configuration parameters from the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Setup defaults if parameters are missing
+        const targetUrl = urlParams.get('url') || 'https://news.mydrivers.com/blog/';
+        let targetWidth = urlParams.get('width') || '600px';
+
+        // Auto-append 'px' if you just pass raw numbers (e.g., width=500 instead of width=500px)
+        if (/^\d+$/.test(targetWidth)) {
+            targetWidth += 'px';
+        }
+
+        // 2. Fetch via the CORS proxy
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+
+        fetch(proxyUrl)
+            .then(response => {
+                if (response.ok) return response.text();
+                throw new Error('Proxy error or connection blocked.');
+            })
+            .then(htmlContent => {
+                const parser = new DOMParser();
+                const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
+
+                // Fix asset paths relative to the current browsing page
+                const baseTag = remoteDoc.createElement('base');
+                baseTag.href = targetUrl;
+                remoteDoc.head.appendChild(baseTag);
+
+                // Inject dynamic CSS layout using your custom width variable
+                const customStyle = remoteDoc.createElement('style');
+                customStyle.innerHTML = `
+                    body {
+                        max-width: ${targetWidth} !important;
+                        width: 100% !important;
+                        margin: 0 auto !important;
+                        background: #fff !important;
+                        padding: 10px !important;
+                        box-shadow: 0 0 15px rgba(0,0,0,0.05);
+                    }
+                    html {
+                        background: #f5f5f7 !important;
+                    }
+                    div, p, table, tr, td, ul, li, section, article {
+                        max-width: 100% !important;
+                        width: auto !important;
+                        min-width: 0 !important;
+                        float: none !important;
+                        box-sizing: border-box !important;
+                    }
+                    img {
+                        max-width: 100% !important;
+                        height: auto !important;
+                        display: block !important;
+                        margin: 10px auto !important;
+                    }
+                    body, p, td {
+                        font-size: 16px !important;
+                        line-height: 1.6 !important;
+                    }
+                `;
+                remoteDoc.head.appendChild(customStyle);
+
+                // Intercept clicks and forward both the target link AND your custom width setting
+                remoteDoc.addEventListener('click', function(e) {
+                    const a = e.target.closest('a');
+                    if (a && a.href && a.href.startsWith('http')) {
+                        e.preventDefault();
+                        
+                        const nextUrl = window.location.origin + window.location.pathname 
+                            + '?url=' + encodeURIComponent(a.href) 
+                            + '&width=' + encodeURIComponent(targetWidth);
+                            
+                        window.location.href = nextUrl;
+                    }
+                });
+
+                document.documentElement.innerHTML = remoteDoc.documentElement.innerHTML;
+            })
+            .catch(err => {
+                document.getElementById('app').innerHTML = `<p style="color:red;">Failed to load: ${err.message}</p>`;
+            });
+    </script>
+</body>
+</html>
