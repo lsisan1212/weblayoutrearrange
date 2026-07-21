@@ -299,10 +299,11 @@
             }
 
             async fetchRemoteContent(url) {
+                // 本機同源代理優先（不受瀏覽器 CORS 限制），外部代理降為備用
                 const proxies = [
+                    u => '/proxy?url=' + encodeURIComponent(u),
                     u => 'https://corsproxy.io/?' + encodeURIComponent(u),
-                    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-                    u => 'https://thingproxy.freeboard.io/fetch/' + u
+                    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)
                 ];
                 let lastErr;
                 for (const makeUrl of proxies) {
