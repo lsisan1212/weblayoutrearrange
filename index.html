@@ -405,7 +405,6 @@
         class App {
             constructor() {
                 this.viewport = document.getElementById('content-viewport');
-                this.proxyBase = 'https://corsproxy.io/?';
                 
                 this.zoomGuard = new ZoomGuard();
                 this.urlManager = new UrlManager('https://news.mydrivers.com/blog/');
@@ -428,10 +427,22 @@
             }
 
             async fetchRemoteContent(url) {
-                const requestUrl = this.proxyBase + encodeURIComponent(url);
-                const response = await fetch(requestUrl);
-                if (!response.ok) throw new Error('網絡代理連線異常');
-                return await response.text();
+                const proxies = [
+                    u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+                    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+                    u => 'https://thingproxy.freeboard.io/fetch/' + u
+                ];
+                let lastErr;
+                for (const makeUrl of proxies) {
+                    try {
+                        const response = await fetch(makeUrl(url));
+                        if (response.ok) return await response.text();
+                        lastErr = new Error('代理回應 ' + response.status);
+                    } catch (e) {
+                        lastErr = e;
+                    }
+                }
+                throw new Error('所有代理連線失敗: ' + (lastErr && lastErr.message));
             }
 
             render(htmlContent, targetUrl) {
