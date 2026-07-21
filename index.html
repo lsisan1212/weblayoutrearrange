@@ -41,7 +41,7 @@
             outline: none;
         }
 
-        #go-btn {
+        #go-btn, #settings-btn {
             height: 34px;
             padding: 0 16px;
             background: #409eff;
@@ -50,6 +50,50 @@
             border-radius: 6px;
             font-size: 14px;
             cursor: pointer;
+            white-space: nowrap;
+        }
+
+        #settings-btn {
+            background: #909399;
+        }
+
+        #settings-panel {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            background: #ffffff;
+            border-bottom: 1px solid #ebeef5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 12px;
+            box-sizing: border-box;
+            z-index: 99998;
+        }
+
+        #settings-panel.open {
+            display: flex;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #303133;
+        }
+
+        .setting-row label {
+            min-width: 64px;
+        }
+
+        .setting-row input[type="range"] {
+            flex: 1;
+        }
+
+        .setting-row .val {
+            min-width: 52px;
+            text-align: right;
+            color: #409eff;
+            font-variant-numeric: tabular-nums;
         }
 
         #content-viewport {
@@ -72,6 +116,25 @@
     <div id="control-bar">
         <input type="text" id="url-input" placeholder="輸入網址..." />
         <button id="go-btn">前往</button>
+        <button id="settings-btn">設定</button>
+    </div>
+
+    <div id="settings-panel">
+        <div class="setting-row">
+            <label for="font-size">字體大小</label>
+            <input type="range" id="font-size" min="12" max="32" step="1" value="16" />
+            <span class="val" id="font-size-val">16px</span>
+        </div>
+        <div class="setting-row">
+            <label for="width-range">寬度</label>
+            <input type="range" id="width-range" min="300" max="1200" step="10" value="800" disabled />
+            <span class="val" id="width-val">800px</span>
+        </div>
+        <div class="setting-row">
+            <label for="full-width">自適應滿寬</label>
+            <input type="checkbox" id="full-width" checked />
+            <span class="val">(100%)</span>
+        </div>
     </div>
 
     <div id="content-viewport">
@@ -87,13 +150,10 @@
                 this.bindPreventionEvents();
             }
 
-            // 監聽並阻斷所有手勢縮放
             bindPreventionEvents() {
-                // 阻斷雙指捏合縮放 (Pinch to zoom)
                 document.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
                 document.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
                 
-                // 阻斷雙擊縮放 (Double tap to zoom)
                 let lastTouchEnd = 0;
                 document.addEventListener('touchend', (e) => {
                     const now = (new Date()).getTime();
@@ -106,12 +166,11 @@
 
             handleTouchStart(e) {
                 if (e.touches.length > 1) {
-                    e.preventDefault(); // 多指觸控直接阻斷
+                    e.preventDefault();
                 }
             }
 
             handleTouchMove(e) {
-                // 如果偵測到縮放比例不為 1，強制阻斷
                 if (e.scale && e.scale !== 1) {
                     e.preventDefault();
                 }
@@ -176,10 +235,85 @@
         }
 
         /**
-         * 4. 負責生成排版樣式（CSS）的類別
+         * 4. 負責使用者顯示設定（字體大小 / 寬度）的類別
+         */
+        class DisplaySettings {
+            constructor(viewport) {
+                this.viewport = viewport;
+                this.fontSize = 16;
+                this.fullWidth = true;
+                this.widthPx = 800;
+                this.userStyleId = 'user-display-style';
+                this.cacheEls();
+                this.bindEvents();
+                this.apply();
+            }
+
+            cacheEls() {
+                this.fontInput = document.getElementById('font-size');
+                this.fontVal = document.getElementById('font-size-val');
+                this.widthInput = document.getElementById('width-range');
+                this.widthVal = document.getElementById('width-val');
+                this.fullChk = document.getElementById('full-width');
+            }
+
+            bindEvents() {
+                this.fontInput.addEventListener('input', () => {
+                    this.fontSize = parseInt(this.fontInput.value, 10);
+                    this.fontVal.textContent = this.fontSize + 'px';
+                    this.applyFontSize();
+                });
+
+                this.widthInput.addEventListener('input', () => {
+                    this.widthPx = parseInt(this.widthInput.value, 10);
+                    this.widthVal.textContent = this.widthPx + 'px';
+                    this.applyWidth();
+                });
+
+                this.fullChk.addEventListener('change', () => {
+                    this.fullWidth = this.fullChk.checked;
+                    this.widthInput.disabled = this.fullWidth;
+                    this.applyWidth();
+                });
+            }
+
+            apply() {
+                this.applyFontSize();
+                this.applyWidth();
+            }
+
+            applyFontSize() {
+                let styleTag = document.getElementById(this.userStyleId);
+                if (!styleTag) {
+                    styleTag = document.createElement('style');
+                    styleTag.id = this.userStyleId;
+                    document.head.appendChild(styleTag);
+                }
+                styleTag.textContent = `
+                    #content-viewport, #content-viewport * {
+                        font-size: ${this.fontSize}px !important;
+                        line-height: 1.8 !important;
+                    }
+                `;
+            }
+
+            applyWidth() {
+                if (this.fullWidth) {
+                    this.viewport.style.maxWidth = 'none';
+                    this.viewport.style.width = '100%';
+                    this.viewport.style.margin = '0';
+                } else {
+                    this.viewport.style.maxWidth = this.widthPx + 'px';
+                    this.viewport.style.width = '100%';
+                    this.viewport.style.margin = '0 auto';
+                }
+            }
+        }
+
+        /**
+         * 5. 負責生成排版樣式（CSS）的類別
          */
         class StyleFactory {
-            // 靜態函數：返回核心自適應 CSS 字串（包含您指定的 1px 和 2px 留白）
             static createFluidStyleString() {
                 return `
                     body {
@@ -213,14 +347,13 @@
         }
 
         /**
-         * 5. 負責清洗 DOM、防禦超連結脫離框架的類別
+         * 6. 負責清洗 DOM、防禦超連結脫離框架的類別
          */
         class DomSanitizer {
             constructor(urlManager) {
                 this.urlManager = urlManager;
             }
 
-            // 清理遠端文件內部的超連結屬性
             purifyLinks(remoteDocument) {
                 remoteDocument.body.querySelectorAll('a').forEach(link => {
                     link.removeAttribute('target');
@@ -228,7 +361,6 @@
                 });
             }
 
-            // 注入自適應樣式與 Base 標籤
             injectMetadata(remoteDocument, targetUrl) {
                 const baseTag = remoteDocument.createElement('base');
                 baseTag.href = targetUrl;
@@ -239,12 +371,11 @@
                 remoteDocument.head.appendChild(styleTag);
             }
 
-            // 註冊全域點擊防禦監聽器 (Capture 模式)
             registerGlobalClickInterceptor() {
                 document.addEventListener('click', (e) => {
                     const a = e.target.closest('a');
                     if (a && a.href && a.href.startsWith('http')) {
-                        if (a.closest('#control-bar')) return;
+                        if (a.closest('#control-bar') || a.closest('#settings-panel')) return;
 
                         e.preventDefault();
                         e.stopImmediatePropagation();
@@ -256,7 +387,7 @@
         }
 
         /**
-         * 6. 負責與 PreText 排版引擎對接的類別
+         * 7. 負責與 PreText 排版引擎對接的類別
          */
         class TypographyEngine {
             static runOptimization(targetContainer) {
@@ -269,18 +400,18 @@
         }
 
         /**
-         * 7. 核心應用程式調度中心（Orchestrator）
+         * 8. 核心應用程式調度中心（Orchestrator）
          */
         class App {
             constructor() {
                 this.viewport = document.getElementById('content-viewport');
                 this.proxyBase = 'https://corsproxy.io/?';
                 
-                // 初始化子模組
                 this.zoomGuard = new ZoomGuard();
                 this.urlManager = new UrlManager('https://news.mydrivers.com/blog/');
                 this.navController = new NavigationController(this.urlManager);
                 this.sanitizer = new DomSanitizer(this.urlManager);
+                this.displaySettings = new DisplaySettings(this.viewport);
             }
 
             async launch() {
@@ -307,22 +438,19 @@
                 const parser = new DOMParser();
                 const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
 
-                // 執行 DOM 淨化與樣式注入
                 this.sanitizer.purifyLinks(remoteDoc);
                 this.sanitizer.injectMetadata(remoteDoc, targetUrl);
 
-                // 渲染至主畫面
                 this.viewport.innerHTML = '';
                 
-                // 遷移標頭資源
                 const assets = remoteDoc.head.querySelectorAll('link, style, base');
                 assets.forEach(asset => document.head.appendChild(asset));
 
-                // 掛載內文
                 this.viewport.appendChild(remoteDoc.body);
 
-                // 執行 PreText 排版優化
                 TypographyEngine.runOptimization(this.viewport);
+                // 重新套用使用者設定，確保每次換頁後仍生效
+                this.displaySettings.apply();
             }
 
             renderError(message) {
@@ -332,6 +460,10 @@
 
         // --- 🚀 系統啟動點 ---
         document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('settings-btn').addEventListener('click', () => {
+                document.getElementById('settings-panel').classList.toggle('open');
+            });
+
             const application = new App();
             application.launch();
         });
