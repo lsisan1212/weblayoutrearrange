@@ -220,15 +220,16 @@
             }
             applyFontSize() {
                 const doc = this.iframe.contentDocument;
-                if (!doc) return;
+                if (!doc || !doc.documentElement) return;
+                doc.documentElement.setAttribute('id', 'wbroot');
                 let s = doc.getElementById(this.userStyleId);
                 if (!s) {
                     s = doc.createElement('style');
                     s.id = this.userStyleId;
                     (doc.head || doc.documentElement).appendChild(s);
                 }
-                // 透過 html font-size 等比縮放（多數網站用 rem，顏色不受影響）
-                s.textContent = `html { font-size: ${this.fontSize}px !important; }`;
+                // 強制每個元素字體大小（不動顏色），等同舊版行為
+                s.textContent = `#wbroot, #wbroot * { font-size: ${this.fontSize}px !important; line-height: 1.8 !important; }`;
             }
         }
 
@@ -236,21 +237,26 @@
          * 5. 注入 <base> + 流動排版 + 點擊攔截腳本到遠端 HTML
          */
         function injectIntoHtml(html, baseUrl) {
+            const viewport = `<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">`;
             const fluid = `<style id="wb-fluid">` +
                 `body{padding:0 2px;box-sizing:border-box;}` +
                 `img,video{max-width:100%;height:auto;display:block;margin:12px auto;}` +
                 `a{color:inherit;}` +
                 `</style>`;
             const base = `<base href="${baseUrl}">`;
-            // 攔截站內連結，改由父層重新經代理載入（保持在 wrapper 內）
-            const navScript = `<script>(function(){document.addEventListener('click',function(e){` +
+            // 注入 iframe 內部：鎖定縮放 + 攔截站內連結（保持在 wrapper 內）
+            const navScript = `<script>(function(){` +
+                `function block(e){if(e.touches&&e.touches.length>1)e.preventDefault();if(e.scale&&e.scale!==1)e.preventDefault();}` +
+                `document.addEventListener('touchstart',block,{passive:false});` +
+                `document.addEventListener('touchmove',block,{passive:false});` +
+                `document.addEventListener('click',function(e){` +
                 `var a=e.target.closest?e.target.closest('a'):null;` +
                 `if(a&&a.href&&/^https?:\\/\\//i.test(a.href)){e.preventDefault();` +
                 `parent.postMessage({__wbNav:a.href},'*');}});})();<\/script>`;
             if (/<head[^>]*>/i.test(html)) {
-                return html.replace(/<head[^>]*>/i, (m) => m + base + fluid + navScript);
+                return html.replace(/<head[^>]*>/i, (m) => m + viewport + base + fluid + navScript);
             }
-            return base + fluid + navScript + html;
+            return viewport + base + fluid + navScript + html;
         }
 
         /**
