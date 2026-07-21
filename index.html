@@ -3,23 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fluid Mobile Web Wrapper (Enterprise OOP)</title>
-    
-    <script src="https://pretextjs.net/js/pretext.min.js" defer></script>
+    <title>Fluid Mobile Web Wrapper (iframe srcdoc)</title>
 
     <style>
         html, body {
             margin: 0;
             padding: 0;
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
             background-color: #f5f5f7;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
         }
 
         #control-bar {
-            position: sticky;
-            top: 0;
-            left: 0;
-            right: 0;
+            flex: 0 0 50px;
             height: 50px;
             background: #ffffff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -58,6 +60,7 @@
         }
 
         #settings-panel {
+            flex: 0 0 auto;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -96,18 +99,31 @@
             font-variant-numeric: tabular-nums;
         }
 
-        #content-viewport {
-            width: 100%;
-            box-sizing: border-box;
+        #frame-wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            position: relative;
             background: #ffffff;
-            min-height: calc(100vh - 50px);
         }
 
-        .status-msg {
+        #content-viewport {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            display: block;
+            background: #ffffff;
+        }
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             font-size: 16px;
             color: #606266;
-            padding-top: 60px;
+            background: #ffffff;
         }
     </style>
 </head>
@@ -127,260 +143,152 @@
         </div>
     </div>
 
-    <div id="content-viewport">
-        <div class="status-msg">正在初始化系統並優化排版...</div>
+    <div id="frame-wrap">
+        <iframe id="content-viewport" sandbox="allow-scripts allow-same-origin allow-popups allow-modals"></iframe>
+        <div id="overlay">正在初始化系統並優化排版...</div>
     </div>
 
     <script>
         /**
-         * 1. 負責封鎖與管控瀏覽器縮放行為的類別
+         * 1. 封鎖瀏覽器縮放行為
          */
         class ZoomGuard {
             constructor() {
                 this.bindPreventionEvents();
             }
-
             bindPreventionEvents() {
-                document.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
-                document.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
-                
-                let lastTouchEnd = 0;
-                document.addEventListener('touchend', (e) => {
-                    const now = (new Date()).getTime();
-                    if (now - lastTouchEnd <= 300) {
-                        e.preventDefault();
-                    }
-                    lastTouchEnd = now;
-                }, { passive: false });
-            }
-
-            handleTouchStart(e) {
-                if (e.touches.length > 1) {
-                    e.preventDefault();
-                }
-            }
-
-            handleTouchMove(e) {
-                if (e.scale && e.scale !== 1) {
-                    e.preventDefault();
-                }
+                document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+                document.addEventListener('touchmove', (e) => { if (e.scale && e.scale !== 1) e.preventDefault(); }, { passive: false });
             }
         }
 
         /**
-         * 2. 負責解析與管理網址參數的類別
+         * 2. 網址參數管理
          */
         class UrlManager {
             constructor(defaultUrl) {
                 this.defaultUrl = defaultUrl;
                 this.params = new URLSearchParams(window.location.search);
             }
-
             getTargetUrl() {
                 return this.params.get('url') || this.defaultUrl;
             }
-
             normalizeUrl(url) {
-                let trimmed = url.trim();
-                if (!trimmed) return '';
-                if (!/^https?:\/\//i.test(trimmed)) {
-                    trimmed = 'https://' + trimmed;
-                }
-                return trimmed;
+                let t = (url || '').trim();
+                if (!t) return '';
+                if (!/^https?:\/\//i.test(t)) t = 'https://' + t;
+                return t;
             }
-
             generateRedirectUrl(targetUrl) {
                 return window.location.origin + window.location.pathname + '?url=' + encodeURIComponent(targetUrl);
             }
         }
 
         /**
-         * 3. 負責置頂控制列 UI 互動的類別
+         * 3. 控制列互動
          */
         class NavigationController {
             constructor(urlManager) {
                 this.urlManager = urlManager;
                 this.inputEl = document.getElementById('url-input');
                 this.btnEl = document.getElementById('go-btn');
-                this.initEvents();
-            }
-
-            setCurrentUrl(url) {
-                this.inputEl.value = url;
-            }
-
-            initEvents() {
                 this.btnEl.addEventListener('click', () => this.executeNavigation());
-                this.inputEl.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.executeNavigation();
-                });
+                this.inputEl.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.executeNavigation(); });
             }
-
+            setCurrentUrl(url) { this.inputEl.value = url; }
             executeNavigation() {
-                const verifiedUrl = this.urlManager.normalizeUrl(this.inputEl.value);
-                if (verifiedUrl) {
-                    window.location.href = this.urlManager.generateRedirectUrl(verifiedUrl);
-                }
+                const v = this.urlManager.normalizeUrl(this.inputEl.value);
+                if (v) window.location.href = this.urlManager.generateRedirectUrl(v);
             }
         }
 
         /**
-         * 4. 負責使用者顯示設定（字體大小 / 寬度）的類別
+         * 4. 使用者顯示設定（字體大小）— 套用至 iframe 內部文件
          */
         class DisplaySettings {
-            constructor(viewport) {
-                this.viewport = viewport;
+            constructor(iframe) {
+                this.iframe = iframe;
                 this.fontSize = 16;
-                this.userStyleId = 'user-display-style';
-                this.cacheEls();
-                this.bindEvents();
-                this.apply();
-            }
-
-            cacheEls() {
-                this.fontInput = document.getElementById('font-size');
-                this.fontVal = document.getElementById('font-size-val');
-            }
-
-            bindEvents() {
-                this.fontInput.addEventListener('input', () => {
-                    this.fontSize = parseInt(this.fontInput.value, 10);
-                    this.fontVal.textContent = this.fontSize + 'px';
+                this.userStyleId = 'wb-user-font';
+                this.input = document.getElementById('font-size');
+                this.val = document.getElementById('font-size-val');
+                this.input.addEventListener('input', () => {
+                    this.fontSize = parseInt(this.input.value, 10);
+                    this.val.textContent = this.fontSize + 'px';
                     this.applyFontSize();
                 });
             }
-
-            apply() {
-                this.applyFontSize();
-            }
-
             applyFontSize() {
-                let styleTag = document.getElementById(this.userStyleId);
-                if (!styleTag) {
-                    styleTag = document.createElement('style');
-                    styleTag.id = this.userStyleId;
-                    document.head.appendChild(styleTag);
+                const doc = this.iframe.contentDocument;
+                if (!doc) return;
+                let s = doc.getElementById(this.userStyleId);
+                if (!s) {
+                    s = doc.createElement('style');
+                    s.id = this.userStyleId;
+                    (doc.head || doc.documentElement).appendChild(s);
                 }
-                styleTag.textContent = `
-                    #content-viewport, #content-viewport * {
-                        font-size: ${this.fontSize}px !important;
-                        line-height: 1.8 !important;
-                    }
-                `;
+                // 透過 html font-size 等比縮放（多數網站用 rem，顏色不受影響）
+                s.textContent = `html { font-size: ${this.fontSize}px !important; }`;
             }
         }
 
         /**
-         * 5. 負責生成排版樣式（CSS）的類別
+         * 5. 注入 <base> + 流動排版 + 點擊攔截腳本到遠端 HTML
          */
-        class StyleFactory {
-            static createFluidStyleString() {
-                return `
-                    body {
-                        padding-left: 1px !important;
-                        padding-right: 2px !important;
-                        box-sizing: border-box !important;
-                        display: block !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                    }
-                    html, div, p, table, tr, td, ul, li, section, article, header, footer {
-                        max-width: 100% !important;
-                        width: auto !important;
-                        min-width: 0 !important;
-                        float: none !important;
-                        box-sizing: border-box !important;
-                    }
-                    img, video {
-                        max-width: 100% !important;
-                        height: auto !important;
-                        display: block !important;
-                        margin: 12px auto !important;
-                    }
-                    p, td, span, article {
-                        line-height: 1.8 !important;
-                    }
-                `;
+        function injectIntoHtml(html, baseUrl) {
+            const fluid = `<style id="wb-fluid">` +
+                `body{padding:0 2px;box-sizing:border-box;}` +
+                `img,video{max-width:100%;height:auto;display:block;margin:12px auto;}` +
+                `a{color:inherit;}` +
+                `</style>`;
+            const base = `<base href="${baseUrl}">`;
+            // 攔截站內連結，改由父層重新經代理載入（保持在 wrapper 內）
+            const navScript = `<script>(function(){document.addEventListener('click',function(e){` +
+                `var a=e.target.closest?e.target.closest('a'):null;` +
+                `if(a&&a.href&&/^https?:\\/\\//i.test(a.href)){e.preventDefault();` +
+                `parent.postMessage({__wbNav:a.href},'*');}});})();<\/script>`;
+            if (/<head[^>]*>/i.test(html)) {
+                return html.replace(/<head[^>]*>/i, (m) => m + base + fluid + navScript);
             }
+            return base + fluid + navScript + html;
         }
 
         /**
-         * 6. 負責清洗 DOM、防禦超連結脫離框架的類別
-         */
-        class DomSanitizer {
-            constructor(urlManager) {
-                this.urlManager = urlManager;
-            }
-
-            purifyLinks(remoteDocument) {
-                remoteDocument.body.querySelectorAll('a').forEach(link => {
-                    link.removeAttribute('target');
-                    link.removeAttribute('onclick');
-                });
-            }
-
-            injectMetadata(remoteDocument, targetUrl) {
-                const baseTag = remoteDocument.createElement('base');
-                baseTag.href = targetUrl;
-                remoteDocument.head.appendChild(baseTag);
-
-                const styleTag = remoteDocument.createElement('style');
-                styleTag.innerHTML = StyleFactory.createFluidStyleString();
-                remoteDocument.head.appendChild(styleTag);
-            }
-
-            registerGlobalClickInterceptor() {
-                document.addEventListener('click', (e) => {
-                    const a = e.target.closest('a');
-                    if (a && a.href && a.href.startsWith('http')) {
-                        if (a.closest('#control-bar') || a.closest('#settings-panel')) return;
-
-                        e.preventDefault();
-                        e.stopImmediatePropagation();
-                        
-                        window.location.href = this.urlManager.generateRedirectUrl(a.href);
-                    }
-                }, true);
-            }
-        }
-
-        /**
-         * 7. 負責與 PreText 排版引擎對接的類別
-         */
-        class TypographyEngine {
-            static runOptimization(targetContainer) {
-                if (typeof PreText !== 'undefined' && typeof PreText.process === 'function') {
-                    PreText.process(targetContainer);
-                } else if (typeof pretext === 'function') {
-                    pretext(targetContainer);
-                }
-            }
-        }
-
-        /**
-         * 8. 核心應用程式調度中心（Orchestrator）
+         * 6. 核心調度
          */
         class App {
             constructor() {
-                this.viewport = document.getElementById('content-viewport');
-                
-                this.zoomGuard = new ZoomGuard();
+                this.iframe = document.getElementById('content-viewport');
+                this.overlay = document.getElementById('overlay');
                 this.urlManager = new UrlManager('https://news.mydrivers.com/blog/');
                 this.navController = new NavigationController(this.urlManager);
-                this.sanitizer = new DomSanitizer(this.urlManager);
-                this.displaySettings = new DisplaySettings(this.viewport);
+                this.displaySettings = new DisplaySettings(this.iframe);
+                new ZoomGuard();
+
+                this.iframe.addEventListener('load', () => {
+                    this.overlay.style.display = 'none';
+                    this.displaySettings.applyFontSize();
+                });
+
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.__wbNav) {
+                        window.location.href = this.urlManager.generateRedirectUrl(e.data.__wbNav);
+                    }
+                });
             }
 
             async launch() {
                 const targetUrl = this.urlManager.getTargetUrl();
                 this.navController.setCurrentUrl(targetUrl);
-                this.sanitizer.registerGlobalClickInterceptor();
-
+                this.overlay.style.display = 'flex';
+                this.overlay.textContent = '正在初始化系統並優化排版...';
                 try {
-                    const htmlContent = await this.fetchRemoteContent(targetUrl);
-                    this.render(htmlContent, targetUrl);
+                    const html = await this.fetchRemoteContent(targetUrl);
+                    this.iframe.srcdoc = injectIntoHtml(html, targetUrl);
                 } catch (err) {
-                    this.renderError(err.message);
+                    this.overlay.style.display = 'flex';
+                    this.overlay.style.color = '#f56c6c';
+                    this.overlay.textContent = '優化失敗: ' + err.message;
                 }
             }
 
@@ -402,39 +310,14 @@
                 }
                 throw new Error('所有代理連線失敗: ' + (lastErr && lastErr.message));
             }
-
-            render(htmlContent, targetUrl) {
-                const parser = new DOMParser();
-                const remoteDoc = parser.parseFromString(htmlContent, 'text/html');
-
-                this.sanitizer.purifyLinks(remoteDoc);
-                this.sanitizer.injectMetadata(remoteDoc, targetUrl);
-
-                this.viewport.innerHTML = '';
-                
-                const assets = remoteDoc.head.querySelectorAll('link, style, base');
-                assets.forEach(asset => document.head.appendChild(asset));
-
-                this.viewport.appendChild(remoteDoc.body);
-
-                TypographyEngine.runOptimization(this.viewport);
-                // 重新套用使用者設定，確保每次換頁後仍生效
-                this.displaySettings.apply();
-            }
-
-            renderError(message) {
-                this.viewport.innerHTML = `<div class="status-msg" style="color:#f56c6c;">優化失敗: ${message}</div>`;
-            }
         }
 
-        // --- 🚀 系統啟動點 ---
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('settings-btn').addEventListener('click', () => {
                 document.getElementById('settings-panel').classList.toggle('collapsed');
             });
-
-            const application = new App();
-            application.launch();
+            const app = new App();
+            app.launch();
         });
     </script>
 </body>
