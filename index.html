@@ -125,16 +125,6 @@
             <input type="range" id="font-size" min="12" max="32" step="1" value="16" />
             <span class="val" id="font-size-val">16px</span>
         </div>
-        <div class="setting-row">
-            <label for="width-range">寬度</label>
-            <input type="range" id="width-range" min="300" max="1200" step="10" value="800" disabled />
-            <span class="val" id="width-val">800px</span>
-        </div>
-        <div class="setting-row">
-            <label for="full-width">自適應滿寬</label>
-            <input type="checkbox" id="full-width" checked />
-            <span class="val">(100%)</span>
-        </div>
     </div>
 
     <div id="content-viewport">
@@ -241,8 +231,6 @@
             constructor(viewport) {
                 this.viewport = viewport;
                 this.fontSize = 16;
-                this.fullWidth = true;
-                this.widthPx = 800;
                 this.userStyleId = 'user-display-style';
                 this.cacheEls();
                 this.bindEvents();
@@ -252,9 +240,6 @@
             cacheEls() {
                 this.fontInput = document.getElementById('font-size');
                 this.fontVal = document.getElementById('font-size-val');
-                this.widthInput = document.getElementById('width-range');
-                this.widthVal = document.getElementById('width-val');
-                this.fullChk = document.getElementById('full-width');
             }
 
             bindEvents() {
@@ -263,23 +248,10 @@
                     this.fontVal.textContent = this.fontSize + 'px';
                     this.applyFontSize();
                 });
-
-                this.widthInput.addEventListener('input', () => {
-                    this.widthPx = parseInt(this.widthInput.value, 10);
-                    this.widthVal.textContent = this.widthPx + 'px';
-                    this.applyWidth();
-                });
-
-                this.fullChk.addEventListener('change', () => {
-                    this.fullWidth = this.fullChk.checked;
-                    this.widthInput.disabled = this.fullWidth;
-                    this.applyWidth();
-                });
             }
 
             apply() {
                 this.applyFontSize();
-                this.applyWidth();
             }
 
             applyFontSize() {
@@ -295,18 +267,6 @@
                         line-height: 1.8 !important;
                     }
                 `;
-            }
-
-            applyWidth() {
-                if (this.fullWidth) {
-                    this.viewport.style.maxWidth = 'none';
-                    this.viewport.style.width = '100%';
-                    this.viewport.style.margin = '0';
-                } else {
-                    this.viewport.style.maxWidth = this.widthPx + 'px';
-                    this.viewport.style.width = '100%';
-                    this.viewport.style.margin = '0 auto';
-                }
             }
         }
 
@@ -338,9 +298,7 @@
                         margin: 12px auto !important;
                     }
                     p, td, span, article {
-                        font-size: 16px !important;
                         line-height: 1.8 !important;
-                        color: #2c3e50 !important;
                     }
                 `;
             }
